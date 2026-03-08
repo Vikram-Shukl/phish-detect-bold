@@ -31,7 +31,7 @@ serve(async (req) => {
     const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON, no extra text, no markdown formatting, no code blocks:\n{"threat_level": "SAFE or SUSPICIOUS or DANGEROUS", "score": 0-100, "red_flags": ["array of strings"], "recommendation": "string"}\n\nEmail: ${emailContent}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
