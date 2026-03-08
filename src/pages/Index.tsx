@@ -1,9 +1,59 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResults";
+
+// Mock analysis for demo
+function mockAnalyze(text: string): AnalysisResult {
+  const len = text.trim().length;
+  if (len < 50) {
+    return {
+      level: "safe",
+      score: 12,
+      redFlags: [],
+      recommendation: "This email appears safe. No suspicious patterns were detected. Always stay vigilant with unexpected messages.",
+    };
+  }
+  if (len < 200) {
+    return {
+      level: "suspicious",
+      score: 58,
+      redFlags: [
+        "Urgency language detected (\"act now\", \"immediately\")",
+        "Sender domain does not match organization name",
+        "Contains a shortened or obfuscated URL",
+      ],
+      recommendation: "Proceed with caution. Do not click any links or download attachments. Verify the sender through an independent channel before responding.",
+    };
+  }
+  return {
+    level: "dangerous",
+    score: 91,
+    redFlags: [
+      "Sender is spoofing a known organization",
+      "Contains credential harvesting link",
+      "Urgency language with threatening consequences",
+      "Mismatched reply-to address",
+      "Grammar and formatting inconsistencies",
+    ],
+    recommendation: "Do NOT interact with this email. Mark it as phishing/spam in your email client. If you already clicked a link, change your passwords immediately and enable two-factor authentication.",
+  };
+}
 
 const Index = () => {
   const [emailText, setEmailText] = useState("");
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const handleAnalyze = () => {
+    if (!emailText.trim()) return;
+    setResult(null);
+    setAnalyzing(true);
+    setTimeout(() => {
+      setResult(mockAnalyze(emailText));
+      setAnalyzing(false);
+    }, 1500);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-mono flex flex-col items-center px-4 py-12">
@@ -29,17 +79,15 @@ const Index = () => {
         <Button
           className="w-full h-12 text-base font-bold tracking-wider uppercase"
           variant="destructive"
+          onClick={handleAnalyze}
+          disabled={!emailText.trim() || analyzing}
         >
-          Analyze Email
+          {analyzing ? "Scanning..." : "Analyze Email"}
         </Button>
       </div>
 
-      {/* Results Section */}
-      <div className="w-full max-w-2xl mt-8 rounded-lg border border-border bg-card p-6 min-h-[120px] flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">
-          Results will appear here after analysis.
-        </p>
-      </div>
+      {/* Results */}
+      {result && <AnalysisResults result={result} />}
     </div>
   );
 };
