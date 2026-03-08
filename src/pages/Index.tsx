@@ -6,7 +6,7 @@ import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResul
 import { RecentScans, getScans, addScan, clearScans, type ScanRecord } from "@/components/RecentScans";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { KeyRound, Loader2, RotateCcw } from "lucide-react";
+import { KeyRound, Loader2, RotateCcw, Share2 } from "lucide-react";
 
 const Index = () => {
   const [apiKey, setApiKey] = useState("");
@@ -52,6 +52,20 @@ const Index = () => {
   const handleReset = () => {
     setResult(null);
     setEmailText("");
+  };
+
+  const handleShare = async () => {
+    if (!result) return;
+    const text = `🛡️ PhishGuard AI Scan Result\n\nVerdict: ${result.level.toUpperCase()}\nThreat Score: ${result.score}/100\n${result.redFlags.length > 0 ? `\nRed Flags:\n${result.redFlags.map(f => `• ${f}`).join("\n")}` : ""}\n\nRecommendation: ${result.recommendation}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "PhishGuard AI Result", text });
+        return;
+      } catch { /* fallback to clipboard */ }
+    }
+    await navigator.clipboard.writeText(text);
+    toast.success("Result copied to clipboard!");
   };
 
   const handleClearHistory = () => {
@@ -132,14 +146,22 @@ const Index = () => {
       {result && (
         <>
           <AnalysisResults result={result} />
-          <div className="w-full max-w-2xl mt-4">
+          <div className="w-full max-w-2xl mt-4 flex gap-3">
             <Button
               variant="outline"
-              className="w-full h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
+              className="flex-1 h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
               onClick={handleReset}
             >
               <RotateCcw className="w-4 h-4" />
               Analyze Another
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
+              onClick={handleShare}
+            >
+              <Share2 className="w-4 h-4" />
+              Share Result
             </Button>
           </div>
         </>
