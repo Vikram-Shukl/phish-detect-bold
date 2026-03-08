@@ -12,7 +12,8 @@ serve(async (req) => {
   }
 
   try {
-    const { emailContent } = await req.json();
+    const { emailContent, apiKey } = await req.json();
+
     if (!emailContent || typeof emailContent !== "string") {
       return new Response(JSON.stringify({ error: "emailContent is required" }), {
         status: 400,
@@ -20,107 +21,84 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!apiKey || typeof apiKey !== "string") {
+      return new Response(JSON.stringify({ error: "Gemini API key is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const systemPrompt = `You are a phishing email analyzer. Analyze the provided email for phishing indicators.
+    const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON, no extra text, no markdown formatting, no code blocks:\n{"threat_level": "SAFE or SUSPICIOUS or DANGEROUS", "score": 0-100, "red_flags": ["array of strings"], "recommendation": "string"}\n\nEmail: ${emailContent}`;
 
-You MUST respond by calling the analyze_email function. Evaluate:
-- Urgency/threat language
-- Suspicious links or domains
-- Spoofed sender identity
-- Requests for credentials or personal info
-- Grammar/spelling inconsistencies
-- Mismatched reply-to addresses
-- Too-good-to-be-true offers
-
-Score from 0 (safe) to 100 (dangerous). Level: "safe" (0-30), "suspicious" (31-65), "dangerous" (66-100).`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this email:\n\n${emailContent}` },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "analyze_email",
-              description: "Return structured phishing analysis results",
-              parameters: {
-                type: "object",
-                properties: {
-                  level: {
-                    type: "string",
-                    enum: ["safe", "suspicious", "dangerous"],
-                    description: "Threat level",
-                  },
-                  score: {
-                    type: "number",
-                    description: "Threat score 0-100",
-                  },
-                  redFlags: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "List of red flags found",
-                  },
-                  recommendation: {
-                    type: "string",
-                    description: "What the user should do next",
-                  },
-                },
-                required: ["level", "score", "redFlags", "recommendation"],
-                additionalProperties: false,
-              },
-            },
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 1024,
           },
-        ],
-        tool_choice: { type: "function", function: { name: "analyze_email" } },
-      }),
-    });
+        }),
+      }
+    );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
+
+      if (response.status === 400 || response.status === 403) {
+        return new Response(JSON.stringify({ error: "Invalid API key. Please check your Gemini API key." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait and try again." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI usage limit reached. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const text = await response.text();
-      console.error("AI gateway error:", response.status, text);
-      throw new Error(`AI gateway error: ${response.status}`);
+
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      throw new Error("No tool call in AI response");
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      throw new Error("No response from Gemini");
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    // Clean markdown code blocks if present
+    const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    // Normalize to our format
+    const levelMap: Record<string, string> = {
+      SAFE: "safe",
+      SUSPICIOUS: "suspicious",
+      DANGEROUS: "dangerous",
+    };
+
+    const result = {
+      level: levelMap[parsed.threat_level?.toUpperCase()] || "suspicious",
+      score: Math.min(100, Math.max(0, Number(parsed.score) || 50)),
+      redFlags: Array.isArray(parsed.red_flags) ? parsed.red_flags : [],
+      recommendation: parsed.recommendation || "Exercise caution with this email.",
+    };
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("analyze-email error:", e);
+    const message = e instanceof Error ? e.message : "Unknown error";
+    const isJsonError = message.includes("JSON");
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: isJsonError ? "Failed to parse AI response. Please try again." : message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
