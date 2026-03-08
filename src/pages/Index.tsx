@@ -54,6 +54,20 @@ const Index = () => {
     setEmailText("");
   };
 
+  const handleShare = async () => {
+    if (!result) return;
+    const text = `🛡️ PhishGuard AI Scan Result\n\nVerdict: ${result.level.toUpperCase()}\nThreat Score: ${result.score}/100\n${result.redFlags.length > 0 ? `\nRed Flags:\n${result.redFlags.map(f => `• ${f}`).join("\n")}` : ""}\n\nRecommendation: ${result.recommendation}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "PhishGuard AI Result", text });
+        return;
+      } catch { /* fallback to clipboard */ }
+    }
+    await navigator.clipboard.writeText(text);
+    toast.success("Result copied to clipboard!");
+  };
+
   const handleClearHistory = () => {
     clearScans();
     setScans([]);
