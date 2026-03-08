@@ -2,57 +2,40 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResults";
-
-// Mock analysis for demo
-function mockAnalyze(text: string): AnalysisResult {
-  const len = text.trim().length;
-  if (len < 50) {
-    return {
-      level: "safe",
-      score: 12,
-      redFlags: [],
-      recommendation: "This email appears safe. No suspicious patterns were detected. Always stay vigilant with unexpected messages.",
-    };
-  }
-  if (len < 200) {
-    return {
-      level: "suspicious",
-      score: 58,
-      redFlags: [
-        "Urgency language detected (\"act now\", \"immediately\")",
-        "Sender domain does not match organization name",
-        "Contains a shortened or obfuscated URL",
-      ],
-      recommendation: "Proceed with caution. Do not click any links or download attachments. Verify the sender through an independent channel before responding.",
-    };
-  }
-  return {
-    level: "dangerous",
-    score: 91,
-    redFlags: [
-      "Sender is spoofing a known organization",
-      "Contains credential harvesting link",
-      "Urgency language with threatening consequences",
-      "Mismatched reply-to address",
-      "Grammar and formatting inconsistencies",
-    ],
-    recommendation: "Do NOT interact with this email. Mark it as phishing/spam in your email client. If you already clicked a link, change your passwords immediately and enable two-factor authentication.",
-  };
-}
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const Index = () => {
   const [emailText, setEmailText] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!emailText.trim()) return;
     setResult(null);
     setAnalyzing(true);
-    setTimeout(() => {
-      setResult(mockAnalyze(emailText));
+
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-email", {
+        body: { emailContent: emailText },
+      });
+
+      if (error) {
+        throw new Error(error.message || "Analysis failed");
+      }
+
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setResult(data as AnalysisResult);
+    } catch (e) {
+      console.error("Analysis error:", e);
+      toast.error(e instanceof Error ? e.message : "Failed to analyze email. Please try again.");
+    } finally {
       setAnalyzing(false);
-    }, 1500);
+    }
   };
 
   return (
