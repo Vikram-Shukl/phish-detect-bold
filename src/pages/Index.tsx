@@ -146,14 +146,22 @@ const Index = () => {
       {result && (
         <>
           <AnalysisResults result={result} />
-          <div className="w-full max-w-2xl mt-4">
+          <div className="w-full max-w-2xl mt-4 flex gap-3">
             <Button
               variant="outline"
-              className="w-full h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
+              className="flex-1 h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
               onClick={handleReset}
             >
               <RotateCcw className="w-4 h-4" />
               Analyze Another
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
+              onClick={handleShare}
+            >
+              <Share2 className="w-4 h-4" />
+              Share Result
             </Button>
           </div>
         </>
