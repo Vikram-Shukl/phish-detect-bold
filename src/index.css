@@ -20,6 +20,12 @@ All colors MUST be HSL.
     --secondary-foreground: 0 0% 85%;
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 55%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 100%;
+    --safe: 142 72% 45%;
+    --safe-foreground: 0 0% 100%;
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
     --accent: 142 72% 45%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
