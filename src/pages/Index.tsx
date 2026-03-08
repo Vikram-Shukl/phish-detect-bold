@@ -6,7 +6,7 @@ import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResul
 import { RecentScans, getScans, addScan, clearScans, type ScanRecord } from "@/components/RecentScans";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Loader2, RotateCcw } from "lucide-react";
 
 const Index = () => {
   const [apiKey, setApiKey] = useState("");
@@ -43,10 +43,15 @@ const Index = () => {
       setScans(getScans());
     } catch (e) {
       console.error("Analysis error:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to analyze email.");
+      toast.error(e instanceof Error ? e.message : "Failed to analyze email. Check your API key and try again.");
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const handleReset = () => {
+    setResult(null);
+    setEmailText("");
   };
 
   const handleClearHistory = () => {
@@ -104,12 +109,41 @@ const Index = () => {
           onClick={handleAnalyze}
           disabled={!emailText.trim() || !apiKey.trim() || analyzing}
         >
-          {analyzing ? "Scanning..." : "Analyze Email"}
+          {analyzing ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            "Analyze Email"
+          )}
         </Button>
       </div>
 
+      {/* Loading Spinner */}
+      {analyzing && (
+        <div className="w-full max-w-2xl mt-8 flex flex-col items-center gap-3 animate-fade-in">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground">Scanning email for threats...</p>
+        </div>
+      )}
+
       {/* Results */}
-      {result && <AnalysisResults result={result} />}
+      {result && (
+        <>
+          <AnalysisResults result={result} />
+          <div className="w-full max-w-2xl mt-4">
+            <Button
+              variant="outline"
+              className="w-full h-10 text-sm font-bold uppercase tracking-wider gap-2 border-border text-muted-foreground hover:text-foreground"
+              onClick={handleReset}
+            >
+              <RotateCcw className="w-4 h-4" />
+              Analyze Another
+            </Button>
+          </div>
+        </>
+      )}
 
       {/* Recent Scans */}
       <RecentScans scans={scans} onClear={handleClearHistory} />
