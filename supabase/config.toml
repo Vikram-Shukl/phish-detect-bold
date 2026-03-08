@@ -1,0 +1,4 @@
+project_id = "jlksunjgrqrfkibawodm"
+
+[functions.analyze-email]
+verify_jwt = false
