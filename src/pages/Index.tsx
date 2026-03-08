@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResults";
+import { RecentScans, getScans, addScan, clearScans, type ScanRecord } from "@/components/RecentScans";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
@@ -12,6 +13,11 @@ const Index = () => {
   const [emailText, setEmailText] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [scans, setScans] = useState<ScanRecord[]>([]);
+
+  useEffect(() => {
+    setScans(getScans());
+  }, []);
 
   const handleAnalyze = async () => {
     if (!emailText.trim()) return;
@@ -28,22 +34,24 @@ const Index = () => {
         body: { emailContent: emailText, apiKey: apiKey.trim() },
       });
 
-      if (error) {
-        throw new Error(error.message || "Analysis failed");
-      }
+      if (error) throw new Error(error.message || "Analysis failed");
+      if (data?.error) { toast.error(data.error); return; }
 
-      if (data?.error) {
-        toast.error(data.error);
-        return;
-      }
-
-      setResult(data as AnalysisResult);
+      const analysisResult = data as AnalysisResult;
+      setResult(analysisResult);
+      addScan(emailText, analysisResult.level, analysisResult.score);
+      setScans(getScans());
     } catch (e) {
       console.error("Analysis error:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to analyze email. Please try again.");
+      toast.error(e instanceof Error ? e.message : "Failed to analyze email.");
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const handleClearHistory = () => {
+    clearScans();
+    setScans([]);
   };
 
   return (
@@ -76,12 +84,7 @@ const Index = () => {
         />
         <p className="text-xs text-muted-foreground mt-1.5">
           Get your key at{" "}
-          <a
-            href="https://aistudio.google.com/apikey"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent underline"
-          >
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-accent underline">
             aistudio.google.com/apikey
           </a>
         </p>
@@ -107,6 +110,9 @@ const Index = () => {
 
       {/* Results */}
       {result && <AnalysisResults result={result} />}
+
+      {/* Recent Scans */}
+      <RecentScans scans={scans} onClear={handleClearHistory} />
     </div>
   );
 };
