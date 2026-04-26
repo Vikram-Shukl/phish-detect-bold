@@ -28,10 +28,10 @@ serve(async (req) => {
       });
     }
 
-    const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON, no extra text, no markdown formatting, no code blocks:\n{"threat_level": "SAFE or SUSPICIOUS or DANGEROUS", "score": 0-100, "red_flags": ["array of strings"], "recommendation": "string"}\n\nEmail: ${emailContent}`;
+    const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON (no markdown, no code blocks, no extra text). All string values MUST be on a single line with no literal newline characters — escape any newlines as \\n. Escape any double quotes inside strings as \\". Schema:\n{"threat_level": "SAFE" | "SUSPICIOUS" | "DANGEROUS", "score": 0-100, "red_flags": ["string", "string"], "recommendation": "string"}\n\nEmail to analyze:\n${emailContent}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,9 +72,34 @@ serve(async (req) => {
       throw new Error("No response from Gemini");
     }
 
-    // Clean markdown code blocks if present
-    const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    // Extract JSON: strip markdown fences, then isolate the outermost {...} block
+    let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      // Repair: escape literal newlines/tabs/carriage returns inside string values
+      const repaired = cleaned.replace(
+        /"((?:[^"\\]|\\.)*)"/g,
+        (_m, inner) =>
+          `"${inner
+            .replace(/\r/g, "\\r")
+            .replace(/\n/g, "\\n")
+            .replace(/\t/g, "\\t")}"`
+      );
+      try {
+        parsed = JSON.parse(repaired);
+      } catch {
+        console.error("Failed to parse Gemini JSON. Raw text:", text);
+        throw parseErr;
+      }
+    }
 
     // Normalize to our format
     const levelMap: Record<string, string> = {
