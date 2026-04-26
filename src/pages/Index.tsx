@@ -14,15 +14,37 @@ const Index = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [scans, setScans] = useState<ScanRecord[]>([]);
+  const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
     setScans(getScans());
   }, []);
 
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => {
+      setCooldown((c) => (c <= 1 ? 0 : c - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [cooldown]);
+
+  const startRateLimitCooldown = () => {
+    setCooldown(60);
+    toast.error("Rate limit exceeded, retrying in 60s", {
+      id: "rate-limit",
+      duration: 60000,
+    });
+  };
+
   const handleAnalyze = async () => {
     if (!emailText.trim()) return;
     if (!apiKey.trim()) {
       toast.error("Please enter your Gemini API key first.");
+      return;
+    }
+    if (cooldown > 0) {
+      toast.error(`Please wait ${cooldown}s before retrying.`);
       return;
     }
 
@@ -34,8 +56,31 @@ const Index = () => {
         body: { emailContent: emailText, apiKey: apiKey.trim() },
       });
 
-      if (error) throw new Error(error.message || "Analysis failed");
-      if (data?.error) { toast.error(data.error); return; }
+      // supabase-js throws FunctionsHttpError on non-2xx; read the response body
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const body = await ctx.clone().json();
+            if (ctx.status === 429) {
+              startRateLimitCooldown();
+              return;
+            }
+            throw new Error(body?.error || error.message || "Analysis failed");
+          } catch (parseErr) {
+            if (ctx.status === 429) {
+              startRateLimitCooldown();
+              return;
+            }
+            throw parseErr instanceof Error ? parseErr : new Error("Analysis failed");
+          }
+        }
+        throw new Error(error.message || "Analysis failed");
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
 
       const analysisResult = data as AnalysisResult;
       setResult(analysisResult);
@@ -121,13 +166,15 @@ const Index = () => {
           className="w-full h-12 text-base font-bold tracking-wider uppercase"
           variant="destructive"
           onClick={handleAnalyze}
-          disabled={!emailText.trim() || !apiKey.trim() || analyzing}
+          disabled={!emailText.trim() || !apiKey.trim() || analyzing || cooldown > 0}
         >
           {analyzing ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
               Analyzing...
             </>
+          ) : cooldown > 0 ? (
+            `Retry in ${cooldown}s`
           ) : (
             "Analyze Email"
           )}
