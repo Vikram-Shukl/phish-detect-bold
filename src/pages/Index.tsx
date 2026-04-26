@@ -77,6 +77,10 @@ const Index = () => {
         }
         throw new Error(error.message || "Analysis failed");
       }
+      if (data?.rateLimited) {
+        startRateLimitCooldown();
+        return;
+      }
       if (data?.error) {
         toast.error(data.error);
         return;
