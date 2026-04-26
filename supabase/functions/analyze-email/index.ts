@@ -64,8 +64,8 @@ ${emailContent}`;
         });
       }
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait and try again." }), {
-          status: 429,
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait and try again.", rateLimited: true }), {
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
