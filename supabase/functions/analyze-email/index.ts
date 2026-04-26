@@ -87,7 +87,7 @@ serve(async (req) => {
       // Repair: escape literal newlines/tabs/carriage returns inside string values
       const repaired = cleaned.replace(
         /"((?:[^"\\]|\\.)*)"/g,
-        (_m, inner) =>
+        (_m: string, inner: string) =>
           `"${inner
             .replace(/\r/g, "\\r")
             .replace(/\n/g, "\\n")
