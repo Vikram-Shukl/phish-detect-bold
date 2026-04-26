@@ -31,7 +31,7 @@ serve(async (req) => {
     const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON (no markdown, no code blocks, no extra text). All string values MUST be on a single line with no literal newline characters — escape any newlines as \\n. Escape any double quotes inside strings as \\". Schema:\n{"threat_level": "SAFE" | "SUSPICIOUS" | "DANGEROUS", "score": 0-100, "red_flags": ["string", "string"], "recommendation": "string"}\n\nEmail to analyze:\n${emailContent}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
