@@ -20,21 +20,27 @@ const Index = () => {
     setScans(getScans());
   }, []);
 
-  // Cooldown countdown timer
+  // Cooldown countdown timer + live toast updates
   useEffect(() => {
     if (cooldown <= 0) return;
+    toast.error(`Rate limit exceeded — retrying in ${cooldown}s`, {
+      id: "rate-limit",
+      duration: Infinity,
+    });
     const id = setInterval(() => {
-      setCooldown((c) => (c <= 1 ? 0 : c - 1));
+      setCooldown((c) => {
+        const next = c <= 1 ? 0 : c - 1;
+        if (next === 0) {
+          toast.success("You can analyze again now.", { id: "rate-limit", duration: 3000 });
+        }
+        return next;
+      });
     }, 1000);
     return () => clearInterval(id);
   }, [cooldown]);
 
   const startRateLimitCooldown = () => {
     setCooldown(60);
-    toast.error("Rate limit exceeded, retrying in 60s", {
-      id: "rate-limit",
-      duration: 60000,
-    });
   };
 
   const handleAnalyze = async () => {
@@ -164,8 +170,15 @@ const Index = () => {
           placeholder="Paste suspicious email here..."
           value={emailText}
           onChange={(e) => setEmailText(e.target.value)}
-          className="min-h-[220px] bg-card border-border text-foreground font-mono text-sm placeholder:text-muted-foreground resize-none focus-visible:ring-primary"
+          disabled={analyzing || cooldown > 0}
+          className="min-h-[220px] bg-card border-border text-foreground font-mono text-sm placeholder:text-muted-foreground resize-none focus-visible:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
         />
+        {cooldown > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive animate-fade-in">
+            <span className="font-bold uppercase tracking-wider">Rate limit hit</span>
+            <span className="font-mono tabular-nums">Retrying in {cooldown}s</span>
+          </div>
+        )}
         <Button
           className="w-full h-12 text-base font-bold tracking-wider uppercase"
           variant="destructive"
