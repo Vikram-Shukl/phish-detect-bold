@@ -2,8 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -28,10 +27,19 @@ serve(async (req) => {
       });
     }
 
-    const prompt = `You are a cybersecurity expert. Analyze this email for phishing. Return ONLY valid JSON (no markdown, no code blocks, no extra text). All string values MUST be on a single line with no literal newline characters — escape any newlines as \\n. Escape any double quotes inside strings as \\". Schema:\n{"threat_level": "SAFE" | "SUSPICIOUS" | "DANGEROUS", "score": 0-100, "red_flags": ["string", "string"], "recommendation": "string"}\n\nEmail to analyze:\n${emailContent}`;
+    const prompt = `You are a cybersecurity expert specializing in phishing detection.
+Analyze the following email and respond with ONLY a JSON object, no other text.
+The JSON must have exactly these fields:
+- threat_level: one of "SAFE", "SUSPICIOUS", or "DANGEROUS"
+- score: a number from 0 to 100 (higher = more dangerous)
+- red_flags: an array of strings describing suspicious elements (empty array if none)
+- recommendation: a single sentence string with advice
+
+Email:
+${emailContent}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,7 +47,7 @@ serve(async (req) => {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 1024,
+            maxOutputTokens: 512,
             responseMimeType: "application/json",
           },
         }),
@@ -49,7 +57,6 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
-
       if (response.status === 400 || response.status === 403) {
         return new Response(JSON.stringify({ error: "Invalid API key. Please check your Gemini API key." }), {
           status: 400,
@@ -62,76 +69,22 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("Gemini raw response:", JSON.stringify(data));
 
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
+      console.error("No text in Gemini response:", JSON.stringify(data));
       throw new Error("No response from Gemini");
     }
 
-    // Extract JSON: strip markdown fences, then isolate the outermost {...} block
-    let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    const firstBrace = cleaned.indexOf("{");
-    const lastBrace = cleaned.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-    }
+    console.log("Gemini text:", text);
 
-    // Walk char-by-char and escape control characters that appear *inside* string values.
-    // Regex-based repair fails because an unescaped newline closes the string match early.
-    const repairJson = (src: string): string => {
-      let out = "";
-      let inString = false;
-      let escaped = false;
-      for (let i = 0; i < src.length; i++) {
-        const ch = src[i];
-        if (inString) {
-          if (escaped) {
-            out += ch;
-            escaped = false;
-            continue;
-          }
-          if (ch === "\\") {
-            out += ch;
-            escaped = true;
-            continue;
-          }
-          if (ch === '"') {
-            inString = false;
-            out += ch;
-            continue;
-          }
-          if (ch === "\n") { out += "\\n"; continue; }
-          if (ch === "\r") { out += "\\r"; continue; }
-          if (ch === "\t") { out += "\\t"; continue; }
-          out += ch;
-        } else {
-          if (ch === '"') inString = true;
-          out += ch;
-        }
-      }
-      return out;
-    };
+    const parsed = JSON.parse(text);
 
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (_parseErr) {
-      const repaired = repairJson(cleaned);
-      try {
-        parsed = JSON.parse(repaired);
-      } catch (finalErr) {
-        console.error("Failed to parse Gemini JSON. Raw text:", text);
-        console.error("After repair:", repaired);
-        throw finalErr;
-      }
-    }
-
-    // Normalize to our format
     const levelMap: Record<string, string> = {
       SAFE: "safe",
       SUSPICIOUS: "suspicious",
@@ -148,12 +101,12 @@ serve(async (req) => {
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (e) {
     console.error("analyze-email error:", e);
     const message = e instanceof Error ? e.message : "Unknown error";
-    const isJsonError = message.includes("JSON");
     return new Response(
-      JSON.stringify({ error: isJsonError ? "Failed to parse AI response. Please try again." : message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
