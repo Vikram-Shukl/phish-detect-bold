@@ -31,6 +31,9 @@ const Index = () => {
       setCooldown((c) => {
         const next = c <= 1 ? 0 : c - 1;
         if (next === 0) {
+          console.info(
+            `[PhishGuard][rate-limit] Cooldown END at ${new Date().toISOString()} — input re-enabled`
+          );
           toast.success("You can analyze again now.", { id: "rate-limit", duration: 3000 });
         }
         return next;
@@ -40,6 +43,9 @@ const Index = () => {
   }, [cooldown]);
 
   const startRateLimitCooldown = () => {
+    console.warn(
+      `[PhishGuard][rate-limit] Cooldown START at ${new Date().toISOString()} — Gemini 429, blocking input for 60s`
+    );
     setCooldown(60);
   };
 
