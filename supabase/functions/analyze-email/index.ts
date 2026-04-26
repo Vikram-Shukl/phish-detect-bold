@@ -80,24 +80,53 @@ serve(async (req) => {
       cleaned = cleaned.slice(firstBrace, lastBrace + 1);
     }
 
+    // Walk char-by-char and escape control characters that appear *inside* string values.
+    // Regex-based repair fails because an unescaped newline closes the string match early.
+    const repairJson = (src: string): string => {
+      let out = "";
+      let inString = false;
+      let escaped = false;
+      for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        if (inString) {
+          if (escaped) {
+            out += ch;
+            escaped = false;
+            continue;
+          }
+          if (ch === "\\") {
+            out += ch;
+            escaped = true;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+            out += ch;
+            continue;
+          }
+          if (ch === "\n") { out += "\\n"; continue; }
+          if (ch === "\r") { out += "\\r"; continue; }
+          if (ch === "\t") { out += "\\t"; continue; }
+          out += ch;
+        } else {
+          if (ch === '"') inString = true;
+          out += ch;
+        }
+      }
+      return out;
+    };
+
     let parsed: any;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      // Repair: escape literal newlines/tabs/carriage returns inside string values
-      const repaired = cleaned.replace(
-        /"((?:[^"\\]|\\.)*)"/g,
-        (_m: string, inner: string) =>
-          `"${inner
-            .replace(/\r/g, "\\r")
-            .replace(/\n/g, "\\n")
-            .replace(/\t/g, "\\t")}"`
-      );
+    } catch (_parseErr) {
+      const repaired = repairJson(cleaned);
       try {
         parsed = JSON.parse(repaired);
-      } catch {
+      } catch (finalErr) {
         console.error("Failed to parse Gemini JSON. Raw text:", text);
-        throw parseErr;
+        console.error("After repair:", repaired);
+        throw finalErr;
       }
     }
 
