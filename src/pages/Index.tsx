@@ -63,34 +63,29 @@ const Index = () => {
     setAnalyzing(true);
 
     try {
-      const prompt = `You are a cybersecurity expert specializing in phishing detection.
-Analyze the following email and respond with ONLY a JSON object, no other text.
-The JSON must have exactly these fields:
-- threat_level: one of "SAFE", "SUSPICIOUS", or "DANGEROUS"
-- score: a number from 0 to 100 (higher = more dangerous)
-- red_flags: an array of strings describing suspicious elements (empty array if none)
-- recommendation: a single sentence string with advice
-
-Email:
-${emailText}`;
-
-      const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: "llama3-8b-8192",
-            temperature: 0.1,
-            max_tokens: 512,
-            response_format: { type: "json_object" },
-            messages: [{ role: "user", content: prompt }],
-          }),
-        }
-      );
+      const emailContent = emailText;
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: "llama3-8b-8192",
+          messages: [
+            {
+              role: "system",
+              content: "You are a cybersecurity expert. Respond with ONLY valid JSON, no markdown, no extra text.",
+            },
+            {
+              role: "user",
+              content: `Analyze this email for phishing. Return ONLY this JSON format: {"threat_level": "SAFE" or "SUSPICIOUS" or "DANGEROUS", "score": 0-100, "red_flags": ["string"], "recommendation": "string"} Email: ${emailContent}`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 512,
+        }),
+      });
 
       if (response.status === 429) {
         startRateLimitCooldown();
@@ -105,10 +100,11 @@ ${emailText}`;
       }
 
       const data = await response.json();
-      const text = data?.choices?.[0]?.message?.content;
+      const text = data.choices?.[0]?.message?.content;
       if (!text) throw new Error("No response from Groq");
 
-      const parsed = JSON.parse(text);
+      const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+      const parsed = JSON.parse(cleaned);
       const levelMap: Record<string, AnalysisResult["level"]> = {
         SAFE: "safe",
         SUSPICIOUS: "suspicious",
