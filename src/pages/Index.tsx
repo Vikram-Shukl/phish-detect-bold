@@ -51,7 +51,7 @@ const Index = () => {
   const handleAnalyze = async () => {
     if (!emailText.trim()) return;
     if (!apiKey.trim()) {
-      toast.error("Please enter your Gemini API key first.");
+      toast.error("Please enter your Groq API key first.");
       return;
     }
     if (cooldown > 0) {
@@ -75,17 +75,19 @@ Email:
 ${emailText}`;
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey.trim())}`,
+        "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey.trim()}`,
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 512,
-              responseMimeType: "application/json",
-            },
+            model: "llama3-8b-8192",
+            temperature: 0.1,
+            max_tokens: 512,
+            response_format: { type: "json_object" },
+            messages: [{ role: "user", content: prompt }],
           }),
         }
       );
@@ -95,16 +97,16 @@ ${emailText}`;
         return;
       }
       if (response.status === 400 || response.status === 403) {
-        toast.error("Invalid API key. Please check your Gemini API key.");
+        toast.error("Invalid API key. Please check your Groq API key.");
         return;
       }
       if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`);
+        throw new Error(`Groq API error: ${response.status}`);
       }
 
       const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("No response from Gemini");
+      const text = data?.choices?.[0]?.message?.content;
+      if (!text) throw new Error("No response from Groq");
 
       const parsed = JSON.parse(text);
       const levelMap: Record<string, AnalysisResult["level"]> = {
@@ -172,20 +174,20 @@ ${emailText}`;
         <div className="flex items-center gap-2 mb-2">
           <KeyRound className="w-4 h-4 text-muted-foreground" />
           <label className="text-xs text-muted-foreground uppercase tracking-wider">
-            Gemini API Key
+            Groq API Key
           </label>
         </div>
         <Input
           type="password"
-          placeholder="Enter your Google Gemini API key..."
+          placeholder="Enter your Groq API key..."
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           className="bg-card border-border text-foreground font-mono text-sm placeholder:text-muted-foreground focus-visible:ring-primary"
         />
         <p className="text-xs text-muted-foreground mt-1.5">
           Get your key at{" "}
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-accent underline">
-            aistudio.google.com/apikey
+          <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-accent underline">
+            console.groq.com
           </a>
         </p>
       </div>
