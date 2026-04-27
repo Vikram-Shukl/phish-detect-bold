@@ -64,6 +64,7 @@ const Index = () => {
 
     try {
       const emailContent = emailText;
+      console.log("[PhishGuard][Groq] API key prefix:", apiKey.trim().slice(0, 3));
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -100,6 +101,7 @@ const Index = () => {
       }
 
       const data = await response.json();
+      console.log("[PhishGuard][Groq] Full API response:", data);
       const text = data.choices?.[0]?.message?.content;
       if (!text) throw new Error("No response from Groq");
 
