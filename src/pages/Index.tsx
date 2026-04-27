@@ -4,7 +4,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { AnalysisResults, type AnalysisResult } from "@/components/AnalysisResults";
 import { RecentScans, getScans, addScan, clearScans, type ScanRecord } from "@/components/RecentScans";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { KeyRound, Loader2, RotateCcw, Share2 } from "lucide-react";
 
@@ -64,41 +63,62 @@ const Index = () => {
     setAnalyzing(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-email", {
-        body: { emailContent: emailText, apiKey: apiKey.trim() },
-      });
+      const prompt = `You are a cybersecurity expert specializing in phishing detection.
+Analyze the following email and respond with ONLY a JSON object, no other text.
+The JSON must have exactly these fields:
+- threat_level: one of "SAFE", "SUSPICIOUS", or "DANGEROUS"
+- score: a number from 0 to 100 (higher = more dangerous)
+- red_flags: an array of strings describing suspicious elements (empty array if none)
+- recommendation: a single sentence string with advice
 
-      // supabase-js throws FunctionsHttpError on non-2xx; read the response body
-      if (error) {
-        const ctx = (error as { context?: Response }).context;
-        if (ctx && typeof ctx.json === "function") {
-          try {
-            const body = await ctx.clone().json();
-            if (ctx.status === 429) {
-              startRateLimitCooldown();
-              return;
-            }
-            throw new Error(body?.error || error.message || "Analysis failed");
-          } catch (parseErr) {
-            if (ctx.status === 429) {
-              startRateLimitCooldown();
-              return;
-            }
-            throw parseErr instanceof Error ? parseErr : new Error("Analysis failed");
-          }
+Email:
+${emailText}`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey.trim())}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 512,
+              responseMimeType: "application/json",
+            },
+          }),
         }
-        throw new Error(error.message || "Analysis failed");
-      }
-      if (data?.rateLimited) {
+      );
+
+      if (response.status === 429) {
         startRateLimitCooldown();
         return;
       }
-      if (data?.error) {
-        toast.error(data.error);
+      if (response.status === 400 || response.status === 403) {
+        toast.error("Invalid API key. Please check your Gemini API key.");
         return;
       }
+      if (!response.ok) {
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
 
-      const analysisResult = data as AnalysisResult;
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("No response from Gemini");
+
+      const parsed = JSON.parse(text);
+      const levelMap: Record<string, AnalysisResult["level"]> = {
+        SAFE: "safe",
+        SUSPICIOUS: "suspicious",
+        DANGEROUS: "dangerous",
+      };
+      const analysisResult: AnalysisResult = {
+        level: levelMap[String(parsed.threat_level).toUpperCase()] || "suspicious",
+        score: Math.min(100, Math.max(0, Number(parsed.score) || 50)),
+        redFlags: Array.isArray(parsed.red_flags) ? parsed.red_flags : [],
+        recommendation: parsed.recommendation || "Exercise caution with this email.",
+      };
+
       setResult(analysisResult);
       addScan(emailText, analysisResult.level, analysisResult.score);
       setScans(getScans());
