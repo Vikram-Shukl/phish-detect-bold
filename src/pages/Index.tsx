@@ -76,7 +76,7 @@ const Index = () => {
           messages: [
             {
               role: "system",
-              content: "You are a cybersecurity expert. Respond with ONLY valid JSON, no markdown, no extra text.",
+              content: "You are a cybersecurity expert. Respond with ONLY valid JSON.",
             },
             {
               role: "user",
@@ -85,6 +85,7 @@ const Index = () => {
           ],
           temperature: 0.1,
           max_tokens: 512,
+          response_format: { type: "json_object" },
         }),
       });
 
@@ -93,10 +94,22 @@ const Index = () => {
         return;
       }
       if (response.status === 400 || response.status === 403) {
+        try {
+          const errorData = await response.clone().json();
+          console.log("Groq error:", JSON.stringify(errorData));
+        } catch (err) {
+          console.log("Groq error: <unparseable response body>", err);
+        }
         toast.error("Invalid API key. Please check your Groq API key.");
         return;
       }
       if (!response.ok) {
+        try {
+          const errorData = await response.clone().json();
+          console.log("Groq error:", JSON.stringify(errorData));
+        } catch (err) {
+          console.log("Groq error: <unparseable response body>", err);
+        }
         throw new Error(`Groq API error: ${response.status}`);
       }
 
